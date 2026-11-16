@@ -64,10 +64,23 @@ def _build_response(template: WorkoutTemplate, session: Session) -> TemplateResp
     return TemplateResponse(id=template.id, name=template.name, exercises=exercises)
 
 
+def _validate_exercise_ids(exercise_ids: list[int], session: Session) -> None:
+    """Raise HTTP 422 if any id in *exercise_ids* does not resolve to an Exercise row."""
+    missing = [eid for eid in exercise_ids if session.get(Exercise, eid) is None]
+    if missing:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=f"Exercise id(s) not found: {missing}",
+        )
+
+
 def _replace_exercises(
     template_id: int, exercise_ids: list[int], session: Session
 ) -> None:
-    """Delete existing TemplateExercise rows for *template_id* and re-insert."""
+    """Delete existing TemplateExercise rows for *template_id* and re-insert.
+
+    Callers must invoke ``_validate_exercise_ids`` before calling this helper.
+    """
     existing = list(
         session.exec(
             select(TemplateExercise).where(TemplateExercise.template_id == template_id)
@@ -98,13 +111,15 @@ def create_template(
     _: str = Depends(require_auth),
 ) -> TemplateResponse:
     """Create a new workout template with an ordered list of exercises."""
+    _validate_exercise_ids(body.exercise_ids, session)
+
     template = WorkoutTemplate(name=body.name)
     session.add(template)
-    session.commit()
+    session.flush()          # obtain PK without committing
     session.refresh(template)
 
     _replace_exercises(template.id, body.exercise_ids, session)
-    session.commit()
+    session.commit()         # single commit for template + exercises
 
     return _build_response(template, session)
 
@@ -159,6 +174,7 @@ def update_template(
         template.name = body.name
         session.add(template)
     if body.exercise_ids is not None:
+        _validate_exercise_ids(body.exercise_ids, session)
         _replace_exercises(template_id, body.exercise_ids, session)
     session.commit()
     session.refresh(template)

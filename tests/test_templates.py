@@ -143,11 +143,16 @@ def test_get_template_returns_ordered_exercises(auth_client):
     assert "muscle_group" in first_ex
     assert "is_custom" in first_ex
 
-    # GET list should also return templates
+    # GET list should also return templates and preserve exercise order there too
     list_resp = auth_client.get("/templates", headers=headers)
     assert list_resp.status_code == 200
     templates = list_resp.json()
-    assert any(t["id"] == template_id for t in templates)
+    matching = [t for t in templates if t["id"] == template_id]
+    assert matching, "Template not found in list endpoint"
+    list_returned_ids = [ex["id"] for ex in matching[0]["exercises"]]
+    assert list_returned_ids == ordered_ids, (
+        f"List endpoint returned wrong exercise order. Expected {ordered_ids}, got {list_returned_ids}"
+    )
 
 
 def test_patch_replaces_exercise_list(auth_client):
@@ -235,3 +240,52 @@ def test_templates_require_auth(auth_client):
     assert auth_client.get("/templates/1").status_code == 401
     assert auth_client.patch("/templates/1", json={"name": "Y"}).status_code == 401
     assert auth_client.delete("/templates/1").status_code == 401
+
+
+def test_invalid_exercise_id_returns_422(auth_client):
+    """POST and PATCH with non-existent exercise ids return 422; no rows are created."""
+    from app.models import WorkoutTemplate, TemplateExercise
+    from sqlmodel import Session, select
+
+    token = get_token(auth_client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    ex_ids = create_exercises(auth_client, headers)
+
+    # POST with a non-existent exercise id
+    bad_ids = [ex_ids[0], 999999]
+    resp = auth_client.post(
+        "/templates",
+        json={"name": "Bad Template", "exercise_ids": bad_ids},
+        headers=headers,
+    )
+    assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+    assert "999999" in resp.text, "Response should name the missing id"
+
+    # Assert no template or TemplateExercise row was created
+    with Session(db_module.engine) as db_session:
+        templates = list(db_session.exec(select(WorkoutTemplate)))
+        assert len(templates) == 0, f"No template should have been created; found {templates}"
+        te_rows = list(db_session.exec(select(TemplateExercise)))
+        assert len(te_rows) == 0, f"No TemplateExercise rows should exist; found {te_rows}"
+
+    # Create a valid template first, then PATCH with invalid id
+    create_resp = auth_client.post(
+        "/templates",
+        json={"name": "Valid", "exercise_ids": [ex_ids[0]]},
+        headers=headers,
+    )
+    assert create_resp.status_code == 201
+    template_id = create_resp.json()["id"]
+
+    patch_resp = auth_client.patch(
+        f"/templates/{template_id}",
+        json={"exercise_ids": [ex_ids[0], 999999]},
+        headers=headers,
+    )
+    assert patch_resp.status_code == 422, f"Expected 422, got {patch_resp.status_code}: {patch_resp.text}"
+
+    # Existing template exercises must be unchanged
+    get_resp = auth_client.get(f"/templates/{template_id}", headers=headers)
+    assert get_resp.status_code == 200
+    assert [ex["id"] for ex in get_resp.json()["exercises"]] == [ex_ids[0]]
