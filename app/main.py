@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from app.db import init_db
 from app.routers import auth as auth_router
 from app.routers import exercises as exercises_router
+from app.routers import templates as templates_router
 
 
 @asynccontextmanager
@@ -15,6 +16,7 @@ app = FastAPI(title="Strength Tracker API", lifespan=lifespan)
 
 app.include_router(auth_router.router)
 app.include_router(exercises_router.router)
+app.include_router(templates_router.router)
 
 
 @app.get("/health")
