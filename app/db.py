@@ -13,8 +13,12 @@ engine = create_engine(
 
 
 def init_db() -> None:
-    """Create all SQLModel tables."""
+    """Create all SQLModel tables and seed base exercises when the table is empty."""
     SQLModel.metadata.create_all(engine)
+    # Deferred import avoids a circular-import at module load time.
+    from app.seed import seed_exercises  # noqa: PLC0415
+    with Session(engine) as session:
+        seed_exercises(session)
 
 
 def get_session() -> Generator[Session, None, None]:
