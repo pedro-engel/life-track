@@ -2,6 +2,10 @@ from sqlmodel import SQLModel, Session, create_engine
 from typing import Generator
 from app.config import settings
 
+# Import models so their tables are registered with SQLModel metadata before
+# create_all() is called.
+import app.models  # noqa: F401  (side-effect import)
+
 engine = create_engine(
     settings.DATABASE_URL,
     connect_args={"check_same_thread": False},
