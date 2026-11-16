@@ -14,7 +14,7 @@ from app.auth import hash_password
 from app.config import get_settings
 
 KNOWN_PASSWORD = "my_secure_password_123"
-KNOWN_SECRET = "test-jwt-secret-for-exercises!!"  # 32 bytes
+KNOWN_SECRET = "test-jwt-secret-for-exercises!!X"  # 32 bytes exactly
 
 
 @pytest.fixture(name="auth_client")
@@ -73,7 +73,9 @@ def test_seed_populates_base_exercises(auth_client):
     )
     assert response.status_code == 200
     exercises = response.json()
-    assert len(exercises) > 0, "Expected seeded exercises; found none"
+    assert len(exercises) == 25, (
+        f"Expected 25 seeded exercises, got {len(exercises)}"
+    )
     assert all(ex["is_custom"] is False for ex in exercises), (
         "All seeded exercises must have is_custom=False"
     )
@@ -131,6 +133,17 @@ def test_edit_exercise_name(auth_client):
     data = response.json()
     assert data["name"] == "Updated Exercise Name"
     assert data["id"] == exercise_id
+
+
+def test_patch_nonexistent_exercise_returns_404(auth_client):
+    """PATCH /exercises/999999 returns 404 when the exercise does not exist."""
+    token = get_token(auth_client)
+    response = auth_client.patch(
+        "/exercises/999999",
+        json={"name": "Ghost"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 404
 
 
 def test_exercises_require_auth(auth_client):
