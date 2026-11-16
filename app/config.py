@@ -6,7 +6,11 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./strength_tracker.db"
     JWT_SECRET: str = "test-jwt-secret"
-    APP_PASSWORD_HASH: str = "test-password-hash"
+    # Default is a valid bcrypt hash of the literal string "REPLACE_ME" so that
+    # a misconfigured app returns 401 (verify fails) rather than 500 (ValueError).
+    APP_PASSWORD_HASH: str = (
+        "$2b$12$FsHdvNfgPt/9R4QFm04IcuBQt4UaKOt6KFhk/61Wgno5W5ndrurA2"
+    )
 
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 

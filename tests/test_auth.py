@@ -23,7 +23,7 @@ def _test_protected(sub: str = Depends(require_auth)):
 
 
 KNOWN_PASSWORD = "my_secure_password_123"
-KNOWN_SECRET = "test-jwt-secret-for-auth-tests"
+KNOWN_SECRET = "test-jwt-secret-for-auth-tests!!"  # 32 bytes — avoids InsecureKeyLengthWarning
 
 
 @pytest.fixture(name="auth_client")
@@ -103,3 +103,12 @@ def test_protected_route_with_token_200(auth_client):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert response.status_code == 200
+
+
+def test_protected_route_with_invalid_token_401(auth_client):
+    """GET /test-auth-protected with a tampered/garbage token returns 401."""
+    response = auth_client.get(
+        "/test-auth-protected",
+        headers={"Authorization": "Bearer this.is.not.a.valid.token"},
+    )
+    assert response.status_code == 401
