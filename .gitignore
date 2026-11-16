@@ -1,0 +1,16 @@
+# SDD scratch / worktrees (git-ignored working state)
+.superpowers/
+.worktrees/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+*.egg-info/
+
+# SQLite database files
+*.db
+*.sqlite
+*.sqlite3
