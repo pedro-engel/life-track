@@ -3,6 +3,7 @@ import './styles/tokens.css'
 import { AuthProvider } from './auth/useAuth'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import Login from './screens/Login'
+import Today from './screens/Today'
 
 /**
  * AppRoutes — inner component that has access to the router context.
@@ -19,14 +20,20 @@ function AppRoutes() {
         element={<Login onAuthenticated={() => navigate('/', { replace: true })} />}
       />
 
-      {/* Protected: placeholder root replaced by the Today screen in Task 3 */}
+      {/* Protected: Today screen at / and /today */}
       <Route
         path="/"
         element={
           <ProtectedRoute>
-            <main style={{ padding: '24px 16px' }}>
-              <p>Life Track is loading…</p>
-            </main>
+            <Today />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/today"
+        element={
+          <ProtectedRoute>
+            <Today />
           </ProtectedRoute>
         }
       />
