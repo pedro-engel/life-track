@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 interface RestTimerProps {
   seconds: number
@@ -14,20 +14,31 @@ function formatTime(total: number): string {
 /**
  * Pinned rest-timer pill. Counts down from `seconds`; calls `onSkip` when
  * the timer reaches zero or the user taps "Pular".
+ *
+ * `onSkip` is captured in a ref so a prop-identity change (parent re-render /
+ * forceUpdate creating a new function) never clears and restarts the countdown.
  */
 export default function RestTimer({ seconds, onSkip }: RestTimerProps) {
   const [remaining, setRemaining] = useState(seconds)
 
+  // Always hold the latest callback — updated synchronously on every render
+  const onSkipRef = useRef(onSkip)
+  useEffect(() => {
+    onSkipRef.current = onSkip
+  }, [onSkip])
+
+  // Countdown effect: depends only on `remaining`, never on `onSkip` identity.
+  // A new function reference from the parent does NOT restart the interval.
   useEffect(() => {
     if (remaining <= 0) {
-      onSkip()
+      onSkipRef.current()
       return
     }
     const timer = setTimeout(() => {
       setRemaining((r) => r - 1)
     }, 1000)
     return () => clearTimeout(timer)
-  }, [remaining, onSkip])
+  }, [remaining])
 
   return (
     <div className="rest" role="timer" aria-label="Descanso">

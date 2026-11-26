@@ -56,35 +56,56 @@ export default function Workout() {
   const templateId = routeState.templateId ?? null
   const stepPosition = routeState.stepPosition ?? 0
 
-  const { state, updateSet, addSet, completeSet, skipRest } = useWorkout(templateId)
+  const { state, updateSet, addSet, completeSet, skipRest, markFinishing, markFinishError } = useWorkout(templateId)
   const elapsed = useElapsed(state.draft?.started_at)
 
-  // Wire the `online` event for opportunistic re-flush (best effort, not the tested path)
+  // Wire the `online` event for opportunistic re-flush (best effort, not the tested path).
+  // draftSnap is synced in the render body so the handler always reads the latest draft.
   const draftSnap = useRef(state.draft)
   draftSnap.current = state.draft
+  // isFinishingRef gates the online handler independently of React's render cycle:
+  // setting it in handleFinish is atomic and never overwritten by a re-render.
+  const isFinishingRef = useRef(false)
   useEffect(() => {
     function handleOnline() {
-      if (draftSnap.current) {
-        flush(draftSnap.current).catch(() => {
-          // best-effort — ignore errors; finish-flush is the guaranteed path
-        })
-      }
+      // Skip if finish is in-progress (isFinishingRef) or no draft to reflush.
+      if (isFinishingRef.current || !draftSnap.current) return
+      flush(draftSnap.current).catch(() => {
+        // best-effort — ignore errors; finish-flush is the guaranteed path
+      })
     }
     window.addEventListener('online', handleOnline)
     return () => window.removeEventListener('online', handleOnline)
   }, [])
 
+  const [finishError, setFinishError] = useState<string | null>(null)
+
   // ---------------------------------------------------------------------------
   // Finish handler
   // ---------------------------------------------------------------------------
   async function handleFinish() {
+    if (!state.draft) return
+    // Atomically guard against double-tap: returns false if already finishing.
+    if (!markFinishing()) return
+
+    // Set the finishing flag synchronously (before any await) so that any
+    // online event that fires during the async finish sequence is blocked.
+    // This ref is never overwritten by a re-render (unlike draftSnap.current).
+    isFinishingRef.current = true
+    setFinishError(null)
+
     const draft = state.draft
-    if (!draft) return
     const finishedAt = new Date().toISOString()
-    await flush(draft, finishedAt)
-    await advanceCycle(stepPosition)
-    await clearDraft()
-    navigate('/', { replace: true })
+    try {
+      await flush(draft, finishedAt)
+      await advanceCycle(stepPosition)
+      await clearDraft()
+      navigate('/', { replace: true })
+    } catch {
+      isFinishingRef.current = false  // re-enable on error
+      markFinishError()
+      setFinishError('Não foi possível finalizar. Verifique sua conexão e tente novamente.')
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -108,6 +129,7 @@ export default function Workout() {
   }
 
   const { template, draft, lastSets, restSeconds } = state
+  const isFinishing = state.status === 'finishing'
 
   return (
     <div className="app-phone" style={{ minHeight: '100svh' }}>
@@ -131,8 +153,9 @@ export default function Workout() {
           type="button"
           className="act"
           onClick={handleFinish}
+          disabled={isFinishing}
         >
-          Finalizar
+          {isFinishing ? 'Finalizando…' : 'Finalizar'}
         </button>
       </header>
 
@@ -191,13 +214,22 @@ export default function Workout() {
 
       {/* Sticky finish footer */}
       <div className="finish">
+        {finishError && (
+          <p
+            role="alert"
+            style={{ color: 'var(--negative)', fontSize: 'var(--fs-small)', marginBottom: '8px', textAlign: 'center' }}
+          >
+            {finishError}
+          </p>
+        )}
         <button
           type="button"
           className="cta"
           onClick={handleFinish}
           aria-label="Finalizar treino"
+          disabled={isFinishing}
         >
-          Finalizar treino
+          {isFinishing ? 'Finalizando…' : 'Finalizar treino'}
         </button>
       </div>
     </div>

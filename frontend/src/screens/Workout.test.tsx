@@ -191,6 +191,129 @@ describe('Workout screen', () => {
       })
     })
   })
+
+  // -------------------------------------------------------------------------
+  // Bug 2 regression: double-tap "Finalizar" must not advance the cycle twice
+  // -------------------------------------------------------------------------
+  describe('finish guard — double-tap prevention', () => {
+    const mockResponse = {
+      id: 'active-session-id',
+      started_at: '2026-01-01T10:00:00.000Z',
+      template_id: 1,
+      finished_at: '2026-01-01T11:00:00.000Z',
+      sets: [] as never[],
+    }
+
+    it('Finalizar button is disabled while finish is in-flight', async () => {
+      let resolveFlush!: (v: typeof mockResponse) => void
+      vi.mocked(sync.flush).mockImplementationOnce(
+        () => new Promise<typeof mockResponse>((r) => { resolveFlush = r }),
+      )
+      vi.mocked(client.advanceCycle).mockResolvedValue({ pointer: 1 })
+
+      renderWorkout({ templateId: 1, stepPosition: 0 })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /finalizar treino/i })).toBeInTheDocument()
+      })
+
+      // Click — flush is pending, handleFinish is suspended
+      await userEvent.click(screen.getByRole('button', { name: /finalizar treino/i }))
+
+      // Button must be disabled (status:'finishing')
+      expect(screen.getByRole('button', { name: /finalizando/i })).toBeDisabled()
+
+      // Resolve flush and let the finish complete
+      act(() => { resolveFlush(mockResponse) })
+
+      await waitFor(() => {
+        expect(screen.getByTestId('today-screen')).toBeInTheDocument()
+      })
+
+      // advanceCycle called exactly once — no double-advance
+      expect(vi.mocked(client.advanceCycle)).toHaveBeenCalledTimes(1)
+    })
+
+    it('a second programmatic finish attempt while in-flight is a no-op', async () => {
+      let resolveFlush!: (v: typeof mockResponse) => void
+      vi.mocked(sync.flush).mockImplementation(
+        () => new Promise<typeof mockResponse>((r) => { resolveFlush = r }),
+      )
+      vi.mocked(client.advanceCycle).mockResolvedValue({ pointer: 1 })
+
+      renderWorkout({ templateId: 1, stepPosition: 0 })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /finalizar treino/i })).toBeInTheDocument()
+      })
+
+      // First tap
+      await userEvent.click(screen.getByRole('button', { name: /finalizar treino/i }))
+
+      // Button is disabled; flush has been called once
+      expect(vi.mocked(sync.flush)).toHaveBeenCalledTimes(1)
+      expect(screen.getByRole('button', { name: /finalizando/i })).toBeDisabled()
+
+      // Resolve the finish
+      act(() => { resolveFlush(mockResponse) })
+
+      await waitFor(() => {
+        expect(screen.getByTestId('today-screen')).toBeInTheDocument()
+      })
+
+      // Still exactly one flush and one advanceCycle call
+      expect(vi.mocked(sync.flush)).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(client.advanceCycle)).toHaveBeenCalledTimes(1)
+    })
+  })
+
+  // -------------------------------------------------------------------------
+  // Bug 3 regression: online event after finish must not cause extra reflush
+  // -------------------------------------------------------------------------
+  describe('online-event reflush guard', () => {
+    const mockResponse = {
+      id: 'active-session-id',
+      started_at: '2026-01-01T10:00:00.000Z',
+      template_id: 1,
+      finished_at: '2026-01-01T11:00:00.000Z',
+      sets: [] as never[],
+    }
+
+    it('online event while finish is in-flight does not trigger an extra flush', async () => {
+      let resolveFlush!: (v: typeof mockResponse) => void
+      vi.mocked(sync.flush).mockImplementationOnce(
+        () => new Promise<typeof mockResponse>((r) => { resolveFlush = r }),
+      )
+      vi.mocked(client.advanceCycle).mockResolvedValue({ pointer: 1 })
+
+      renderWorkout({ templateId: 1, stepPosition: 0 })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /finalizar treino/i })).toBeInTheDocument()
+      })
+
+      // Start finish — flush is pending; draftSnap.current is now null
+      await userEvent.click(screen.getByRole('button', { name: /finalizar treino/i }))
+
+      // Dispatch online event while the finish is in-flight.
+      // The online handler checks `if (draftSnap.current)` — which is now null
+      // → no extra flush call.
+      act(() => { window.dispatchEvent(new Event('online')) })
+
+      // Only the finish flush — no opportunistic extra flush
+      expect(vi.mocked(sync.flush)).toHaveBeenCalledTimes(1)
+
+      // Complete the finish
+      act(() => { resolveFlush(mockResponse) })
+
+      await waitFor(() => {
+        expect(screen.getByTestId('today-screen')).toBeInTheDocument()
+      })
+
+      // Still only 1 flush total
+      expect(vi.mocked(sync.flush)).toHaveBeenCalledTimes(1)
+    })
+  })
 })
 
 // ---------------------------------------------------------------------------
@@ -242,5 +365,34 @@ describe('RestTimer', () => {
     })
 
     expect(onSkip).toHaveBeenCalled()
+  })
+
+  /**
+   * Bug 1 regression: when the parent re-renders (e.g. forceUpdate from
+   * updateSet) and passes a new `onSkip` function reference, the countdown
+   * must NOT stall. The timer started at t=0 must still fire at t=1000ms even
+   * if `onSkip` changed at t=500ms.
+   */
+  it('countdown keeps its pace when onSkip prop identity changes mid-interval', () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+
+    const { rerender } = render(<RestTimer seconds={5} onSkip={vi.fn()} />)
+    expect(screen.getByText('0:05')).toBeInTheDocument()
+
+    // Advance 500ms — first tick hasn't fired yet (timer is at 1000ms)
+    act(() => { vi.advanceTimersByTime(500) })
+    expect(screen.getByText('0:05')).toBeInTheDocument()
+
+    // Simulate parent re-render with a new function reference (like forceUpdate() does)
+    rerender(<RestTimer seconds={5} onSkip={vi.fn()} />)
+    expect(screen.getByText('0:05')).toBeInTheDocument()
+
+    // Advance another 500ms (1000ms total from start).
+    // With the BUG (onSkip in effect deps): timer was restarted at t=500ms, fires at
+    //   t=1500ms — another 500ms is not enough → still shows 0:05.
+    // With the FIX (onSkip via ref, NOT in effect deps): original timer fires at
+    //   t=1000ms → remaining becomes 4 → shows 0:04.
+    act(() => { vi.advanceTimersByTime(500) })
+    expect(screen.getByText('0:04')).toBeInTheDocument()
   })
 })

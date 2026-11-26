@@ -1,4 +1,4 @@
-import { useEffect, useReducer, useRef } from 'react'
+import { useCallback, useEffect, useReducer, useRef } from 'react'
 import { getLastSet, getTemplate } from '../api/client'
 import type { LastSet, TemplateResponse } from '../api/types'
 import { loadDraft, startWorkout, upsertSet } from './localStore'
@@ -170,8 +170,30 @@ export function useWorkout(templateId: number | null) {
     forceUpdate()
   }
 
-  function skipRest() {
+  // useCallback so the function reference is stable across renders — a stable
+  // skipRest means RestTimer's onSkip prop doesn't change identity on every
+  // forceUpdate(), preventing redundant effect teardowns. (The ref inside
+  // RestTimer also guards against this, but stable identity is a belt-and-braces fix.)
+  const skipRest = useCallback(() => {
     stateRef.current = { ...stateRef.current, restSeconds: null }
+    forceUpdate()
+  }, []) // stateRef and forceUpdate are both stable across renders
+
+  /**
+   * Atomically flip status to 'finishing'.
+   * Returns true if the transition happened, false if already finishing
+   * (double-tap guard — caller should return early on false).
+   */
+  function markFinishing(): boolean {
+    if (stateRef.current.status === 'finishing') return false
+    stateRef.current = { ...stateRef.current, status: 'finishing' }
+    forceUpdate()
+    return true
+  }
+
+  /** Re-enable the finish button after a failed finish attempt. */
+  function markFinishError() {
+    stateRef.current = { ...stateRef.current, status: 'ready' }
     forceUpdate()
   }
 
@@ -185,5 +207,7 @@ export function useWorkout(templateId: number | null) {
     addSet,
     completeSet,
     skipRest,
+    markFinishing,
+    markFinishError,
   }
 }
