@@ -37,6 +37,13 @@ class BodyWeightIn(BaseModel):
             raise ValueError("weight must be > 0")
         return v
 
+    @field_validator("recorded_at")
+    @classmethod
+    def normalize_recorded_at(cls, v: Optional[datetime]) -> Optional[datetime]:
+        if v is not None and v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v
+
 
 class BodyWeightOut(BaseModel):
     id: int

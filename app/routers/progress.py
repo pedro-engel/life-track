@@ -57,6 +57,7 @@ class ProgressPoint(BaseModel):
 def get_last_set(
     exercise_id: int,
     position: int,
+    exclude_session_id: Optional[str] = None,
     db: Session = Depends(get_session),
     _: str = Depends(require_auth),
 ) -> Optional[LastSetResponse]:
@@ -64,12 +65,18 @@ def get_last_set(
 
     HTTP 200 with JSON null when the exercise has never been logged — this is
     a "no reference yet" signal, not an error.
+
+    When *exclude_session_id* is provided, that session is excluded from the
+    "most recent prior session" selection (use this to avoid echoing the
+    currently-active session as its own reference).
     """
-    entry = last_set_for(db, exercise_id, position)
+    entry = last_set_for(db, exercise_id, position, exclude_session_id=exclude_session_id)
     if entry is None:
         return None
 
     session = db.get(WorkoutSession, entry.session_id)
+    if session is None:
+        return None
     return LastSetResponse(
         weight=entry.weight,
         reps=entry.reps,

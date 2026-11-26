@@ -3,6 +3,10 @@ from functools import lru_cache
 from pydantic_settings import BaseSettings
 
 
+class InsecureDefaultKeyWarning(UserWarning):
+    """Emitted at startup when JWT_SECRET is left at the insecure factory default."""
+
+
 class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./strength_tracker.db"
     JWT_SECRET: str = "test-jwt-secret"

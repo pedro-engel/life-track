@@ -8,7 +8,7 @@ GET    /sessions/{id}    Get a single session with its sets.
 
 All endpoints require a valid ``Authorization: Bearer <token>`` header.
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -56,6 +56,20 @@ class SessionIn(BaseModel):
     started_at: datetime
     template_id: Optional[int] = None
     finished_at: Optional[datetime] = None
+
+    @field_validator("started_at")
+    @classmethod
+    def normalize_started_at(cls, v: datetime) -> datetime:
+        if v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v
+
+    @field_validator("finished_at")
+    @classmethod
+    def normalize_finished_at(cls, v: Optional[datetime]) -> Optional[datetime]:
+        if v is not None and v.tzinfo is None:
+            return v.replace(tzinfo=timezone.utc)
+        return v
 
 
 class SyncRequest(BaseModel):

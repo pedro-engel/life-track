@@ -1,6 +1,8 @@
+import warnings
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.db import init_db
+from app.config import get_settings, InsecureDefaultKeyWarning
 from app.routers import auth as auth_router
 from app.routers import exercises as exercises_router
 from app.routers import templates as templates_router
@@ -9,9 +11,20 @@ from app.routers import sessions as sessions_router
 from app.routers import progress as progress_router
 from app.routers import bodyweight as bodyweight_router
 
+_DEFAULT_JWT_SECRET = "test-jwt-secret"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    settings = get_settings()
+    if settings.JWT_SECRET == _DEFAULT_JWT_SECRET:
+        warnings.warn(
+            "JWT_SECRET is set to the insecure factory default 'test-jwt-secret'. "
+            "Set a strong random secret via the JWT_SECRET environment variable "
+            "before exposing this service.",
+            InsecureDefaultKeyWarning,
+            stacklevel=1,
+        )
     init_db()
     yield
 

@@ -215,6 +215,52 @@ def test_history_orders_most_recent_first(client):
     )
 
 
+def test_sync_naive_datetime_normalized_to_utc(client):
+    """POST /sessions/sync with a naive ISO timestamp must succeed and return UTC.
+
+    A client sending '2026-11-16T10:00:00' (no Z/offset) must get HTTP 200;
+    the response started_at must round-trip as 2026-11-16T10:00:00+00:00 (UTC).
+    This test fails before the field-validator fix and passes after.
+    """
+    token = get_token(client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    session_id = str(uuid.uuid4())
+    # Explicitly naive ISO string — no 'Z', no '+00:00'
+    naive_iso = "2026-11-16T10:00:00"
+    payload = {
+        "session": {
+            "id": session_id,
+            "started_at": naive_iso,
+            "template_id": None,
+            "finished_at": None,
+        },
+        "sets": [],
+    }
+    resp = client.post("/sessions/sync", json=payload, headers=headers)
+    assert resp.status_code == 200, (
+        f"Expected 200 for naive timestamp, got {resp.status_code}: {resp.text}"
+    )
+
+    data = resp.json()
+    assert data["id"] == session_id
+
+    # The returned datetime must carry UTC timezone info (not naive)
+    returned_str = data["started_at"]
+    assert returned_str.endswith("Z") or "+00:00" in returned_str, (
+        f"Expected UTC-aware datetime in response, got: {returned_str!r}"
+    )
+
+    # And it must represent the same instant as the naive input interpreted as UTC
+    if returned_str.endswith("Z"):
+        returned_str = returned_str[:-1] + "+00:00"
+    returned_dt = datetime.fromisoformat(returned_str)
+    expected_dt = datetime(2026, 11, 16, 10, 0, 0, tzinfo=timezone.utc)
+    assert returned_dt == expected_dt, (
+        f"Expected {expected_dt.isoformat()} but got {returned_dt.isoformat()}"
+    )
+
+
 def test_negative_weight_or_reps_rejected_422(client):
     """weight < 0 or reps < 0 returns 422; zero is accepted (Review Focus)."""
     token = get_token(client)

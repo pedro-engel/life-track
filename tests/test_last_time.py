@@ -157,6 +157,59 @@ def test_last_set_returns_null_for_never_logged_exercise(client):
     assert resp.json() is None
 
 
+def test_last_set_exclude_session_id_returns_older_session(client):
+    """GET /exercises/{id}/last-set?exclude_session_id=X skips that session.
+
+    Two sessions logged the exercise; querying with exclude_session_id equal to
+    the newer session's id must return the OLDER session's set.
+    This test fails before the fix (extra param ignored → returns newer) and
+    passes after (newer session filtered out → returns older).
+    """
+    token = get_token(client)
+    exercise_id = 2  # use a different id from other tests to keep state isolated
+    base = datetime(2024, 10, 1, tzinfo=timezone.utc)
+
+    # Older session: weight=30kg
+    _sync_session(
+        client,
+        token,
+        started_at=base,
+        sets=[
+            {"exercise_id": exercise_id, "position": 0, "weight": 30.0, "reps": 12, "note": None, "completed": True},
+        ],
+    )
+
+    # Newer session: weight=35kg
+    newer_session_id = _sync_session(
+        client,
+        token,
+        started_at=base + timedelta(days=7),
+        sets=[
+            {"exercise_id": exercise_id, "position": 0, "weight": 35.0, "reps": 10, "note": None, "completed": True},
+        ],
+    )
+
+    # Without exclusion: newer session's set is returned
+    resp = client.get(
+        f"/exercises/{exercise_id}/last-set?position=0",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["weight"] == 35.0, "Sanity: without exclusion the newer set is returned"
+
+    # With exclude_session_id=newer: older session's set must be returned
+    resp = client.get(
+        f"/exercises/{exercise_id}/last-set?position=0&exclude_session_id={newer_session_id}",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 200, resp.text
+    data = resp.json()
+    assert data is not None, "Expected a result from the older session, not null"
+    assert data["weight"] == 30.0, (
+        f"Expected older session's weight (30.0) but got {data['weight']}"
+    )
+
+
 def test_last_set_picks_most_recent_prior_session(client):
     """When the exercise was logged in multiple sessions, return from the most recent."""
     token = get_token(client)

@@ -22,13 +22,21 @@ from sqlmodel import Session, select
 from app.models import SetEntry, WorkoutSession
 
 
-def last_set_for(db: Session, exercise_id: int, position: int) -> SetEntry | None:
+def last_set_for(
+    db: Session,
+    exercise_id: int,
+    position: int,
+    exclude_session_id: str | None = None,
+) -> SetEntry | None:
     """Return the reference set for *exercise_id* at *position*.
 
     Args:
         db: An open SQLModel/SQLAlchemy Session.
         exercise_id: The exercise to look up.
         position: The set index (0-based, as stored in SetEntry.position).
+        exclude_session_id: When provided, skip this session id when selecting
+            the most-recent prior session.  Callers pass the id of the
+            in-progress session so it isn't echoed back as the reference.
 
     Returns:
         The matching SetEntry from the most recent prior session, or ``None``
@@ -45,12 +53,16 @@ def last_set_for(db: Session, exercise_id: int, position: int) -> SetEntry | Non
         return None
 
     # Step 2 — find the most recent WorkoutSession among those
-    prior_session = db.exec(
+    stmt = (
         select(WorkoutSession)
         .where(WorkoutSession.id.in_(session_ids))
         .order_by(WorkoutSession.started_at.desc())
         .limit(1)
-    ).first()
+    )
+    if exclude_session_id is not None:
+        stmt = stmt.where(WorkoutSession.id != exclude_session_id)
+
+    prior_session = db.exec(stmt).first()
 
     if prior_session is None:
         return None
@@ -85,7 +97,7 @@ def last_set_for(db: Session, exercise_id: int, position: int) -> SetEntry | Non
 
 
 @dataclass
-class ProgressPoint:
+class ProgressRow:
     """One data point in a per-exercise progress series."""
 
     date: datetime
@@ -93,7 +105,7 @@ class ProgressPoint:
     total_reps: int
 
 
-def progress_series_for(db: Session, exercise_id: int) -> list[ProgressPoint]:
+def progress_series_for(db: Session, exercise_id: int) -> list[ProgressRow]:
     """Return a chronological series of per-session aggregates for *exercise_id*.
 
     Each element represents one WorkoutSession that logged the exercise:
@@ -117,6 +129,6 @@ def progress_series_for(db: Session, exercise_id: int) -> list[ProgressPoint]:
     ).all()
 
     return [
-        ProgressPoint(date=started_at, top_weight=top_weight, total_reps=total_reps)
+        ProgressRow(date=started_at, top_weight=top_weight, total_reps=total_reps)
         for started_at, top_weight, total_reps in rows
     ]
