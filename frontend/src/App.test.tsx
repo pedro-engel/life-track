@@ -5,8 +5,8 @@ import App from './App'
 describe('App shell', () => {
   it('renders app shell with root element', () => {
     const { container } = render(<App />)
-    // The app should render a root wrapper element
-    expect(container.firstChild).toBeTruthy()
+    // App renders <div id="app-root" class="app-phone"> as its root wrapper
+    expect(container.querySelector('#app-root')).toBeTruthy()
   })
 
   it('references Instrument Sans font family on document.body', () => {

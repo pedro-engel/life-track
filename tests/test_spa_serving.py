@@ -87,3 +87,14 @@ def test_unknown_client_route_falls_back(dist_client):
     response = dist_client.get("/today")
     assert response.status_code == 200
     assert '<div id="root">' in response.text
+
+
+def test_api_404_is_not_swallowed(dist_client):
+    """API 404s must not be replaced by the SPA index.html.
+
+    /auth/does-not-exist-at-all matches no registered route; the SPA fallback
+    must let it propagate as a JSON 404, not silently serve the SPA shell.
+    """
+    response = dist_client.get("/auth/does-not-exist-at-all")
+    assert response.headers.get("content-type", "").startswith("application/json")
+    assert '<div id="root">' not in response.text
