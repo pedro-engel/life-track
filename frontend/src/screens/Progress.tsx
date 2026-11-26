@@ -107,9 +107,14 @@ export default function Progress() {
     allTimestamps.length > 0 ? new Date(Math.max(...allTimestamps)) : new Date()
 
   // ----- Log body weight and refresh -----
-  async function handleLog(weight: number) {
+  // Intentionally re-throws if logBodyweight fails so LogBodyWeight can keep
+  // the user's input value and show an inline error — no silent data loss.
+  async function handleLog(weight: number): Promise<void> {
+    // Let this throw on POST failure — LogBodyWeight awaits us and will catch.
     await logBodyweight(weight)
-    // Refresh body-weight entries
+
+    // POST succeeded — refresh the chart. Refresh failure is non-fatal:
+    // the entry is already persisted on the server.
     if (screenState.status !== 'ready') return
     try {
       const updated = await listBodyweight()
@@ -117,7 +122,7 @@ export default function Progress() {
         prev.status === 'ready' ? { ...prev, bwEntries: updated } : prev,
       )
     } catch {
-      // If refresh fails, leave the stale data — user can reload
+      // Refresh failure after a successful log — leave stale data, user can reload
     }
   }
 

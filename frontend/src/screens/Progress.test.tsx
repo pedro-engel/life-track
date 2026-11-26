@@ -132,6 +132,42 @@ describe('Progress screen', () => {
       await waitFor(() => {
         expect(client.logBodyweight).toHaveBeenCalledWith(77.5)
       })
+
+      // chart refreshes after successful log — listBodyweight is called twice
+      // (once on initial load, once after the log succeeds)
+      expect(client.listBodyweight).toHaveBeenCalledTimes(2)
+    })
+  })
+
+  describe('log failure', () => {
+    it('preserves the input value and shows an error when logBodyweight rejects', async () => {
+      vi.mocked(client.listExercises).mockResolvedValueOnce([
+        { id: 1, name: 'Supino', muscle_group: 'chest', description: null, is_custom: false },
+      ])
+      vi.mocked(client.getProgress).mockResolvedValueOnce([])
+      vi.mocked(client.listBodyweight).mockResolvedValueOnce([])
+      vi.mocked(client.listSessions).mockResolvedValueOnce([])
+      vi.mocked(client.listTemplates).mockResolvedValueOnce([])
+      vi.mocked(client.logBodyweight).mockRejectedValueOnce(new Error('Network error'))
+
+      renderProgress()
+
+      // Wait for the form to appear
+      await waitFor(() => {
+        expect(screen.getByRole('spinbutton')).toBeInTheDocument()
+      })
+
+      const input = screen.getByRole('spinbutton')
+      await userEvent.clear(input)
+      await userEvent.type(input, '77.5')
+      await userEvent.click(screen.getByRole('button', { name: /registrar/i }))
+
+      await waitFor(() => {
+        // Error message is shown inline
+        expect(screen.getByRole('alert')).toBeInTheDocument()
+        // Input value is preserved — user can correct and retry
+        expect(input).toHaveValue(77.5)
+      })
     })
   })
 
