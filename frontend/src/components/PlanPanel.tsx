@@ -3,7 +3,8 @@ import type { LastSet, TemplateResponse } from '../api/types'
 
 interface ExerciseRowProps {
   name: string
-  lastSet: LastSet | undefined
+  /** null = never logged (primeira vez); undefined = not in map (safe fallback = primeira vez). */
+  lastSet: LastSet | null | undefined
 }
 
 function ExerciseRow({ name, lastSet }: ExerciseRowProps) {
@@ -25,8 +26,12 @@ function ExerciseRow({ name, lastSet }: ExerciseRowProps) {
 
 interface PlanPanelProps {
   template: TemplateResponse
-  /** Map from exerciseId → LastSet (may be null for never-logged exercises). */
-  lastSets: Map<number, LastSet>
+  /**
+   * Map from exerciseId → last set data.
+   * null means the exercise has never been logged (primeira vez).
+   * undefined (missing key) is treated the same as null.
+   */
+  lastSets: Map<number, LastSet | null>
 }
 
 /**

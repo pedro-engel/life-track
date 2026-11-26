@@ -119,8 +119,8 @@ describe('Today screen', () => {
     })
   })
 
-  describe('run step renders marker, no template fetch', () => {
-    it('shows Strava-style marker and does not call getTemplate for a run step', async () => {
+  describe('run step renders Strava marker; Amanhã shows real template name', () => {
+    it('shows Strava-style marker and Amanhã cycle card shows real template name (not generic "Treino")', async () => {
       vi.mocked(client.getCycle).mockResolvedValueOnce({
         steps: [
           { position: 0, kind: 'run', template_id: null },
@@ -129,6 +129,12 @@ describe('Today screen', () => {
         pointer: 0,
         next: { position: 1, kind: 'template', template_id: 1 },
       })
+      // getTemplate is called for the NEXT step (Peito), NOT the current run step
+      vi.mocked(client.getTemplate).mockResolvedValueOnce({
+        id: 1,
+        name: 'Peito',
+        exercises: [],
+      })
       vi.mocked(client.listBodyweight).mockResolvedValueOnce([])
 
       renderToday()
@@ -136,7 +142,14 @@ describe('Today screen', () => {
       await waitFor(() => {
         expect(screen.getByText(/registrada no strava/i)).toBeInTheDocument()
       })
-      expect(vi.mocked(client.getTemplate)).not.toHaveBeenCalled()
+
+      // Amanhã card shows "Peito", not the generic "Treino" fallback
+      expect(screen.getByText('Peito')).toBeInTheDocument()
+      expect(screen.queryByText('Treino')).not.toBeInTheDocument()
+
+      // getTemplate was called once — for the NEXT template step, not the current run step
+      expect(vi.mocked(client.getTemplate)).toHaveBeenCalledTimes(1)
+      expect(vi.mocked(client.getTemplate)).toHaveBeenCalledWith(1)
     })
   })
 

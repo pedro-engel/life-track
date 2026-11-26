@@ -26,6 +26,8 @@ type ScreenState =
       cycle: CycleGetResponse
       currentStep: StepResponse
       nextStp: StepResponse | null
+      /** Names for next-step template (and beyond) so cycle cards show real names. */
+      templateNames: Map<number, string>
       bw: BodyWeightOut[]
     }
   | {
@@ -35,7 +37,12 @@ type ScreenState =
       nextStp: StepResponse | null
       currentTemplate: TemplateResponse
       templateNames: Map<number, string>
-      lastSets: Map<number, LastSet>
+      /**
+       * null = never logged (primera vez); built from getLastSet resolving to null.
+       * Explicit null | null in the value prevents a future `!== undefined` guard
+       * from silently dropping the "primeira vez" case.
+       */
+      lastSets: Map<number, LastSet | null>
       bw: BodyWeightOut[]
     }
 
@@ -186,9 +193,21 @@ export default function Today() {
         const nextStp = nextStep(cycle)
 
         if (currentStep.kind !== 'template') {
-          // Run/rest step — do NOT call getTemplate
-          const bw = await listBodyweight()
-          if (!cancelled) setState({ status: 'non-template', cycle, currentStep, nextStp, bw })
+          // Run/rest step — do NOT call getTemplate for the current step.
+          // But DO fetch the next step's template name so cycle cards show
+          // the real workout name on the Amanhã card (not the generic "Treino").
+          const nextTemplatePromise: Promise<TemplateResponse | null> =
+            nextStp?.kind === 'template' && nextStp.template_id != null
+              ? getTemplate(nextStp.template_id)
+              : Promise.resolve(null)
+
+          const [bw, nextTemplate] = await Promise.all([listBodyweight(), nextTemplatePromise])
+
+          const templateNames = new Map<number, string>()
+          if (nextTemplate) templateNames.set(nextTemplate.id, nextTemplate.name)
+
+          if (!cancelled)
+            setState({ status: 'non-template', cycle, currentStep, nextStp, templateNames, bw })
           return
         }
 
@@ -212,7 +231,7 @@ export default function Today() {
 
         if (nextTemplate) templateNames.set(nextTemplate.id, nextTemplate.name)
 
-        const lastSets = new Map<number, LastSet>(lastSetPairs)
+        const lastSets = new Map<number, LastSet | null>(lastSetPairs)
 
         if (!cancelled) {
           setState({
@@ -295,25 +314,34 @@ export default function Today() {
     )
   }
 
-  const hour = new Date().getHours()
+  const now = new Date()
+  const hour = now.getHours()
   const isNight = hour >= 18
+  const dateStr = now.toLocaleDateString('pt-BR', {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  })
 
   // --- Non-template (run/rest) ---
 
   if (state.status === 'non-template') {
     const templateNameForGreeting = stepLabel(state.currentStep)
     const nextTemplateName = state.nextStp
-      ? (state.nextStp.kind === 'template' ? 'Treino' : stepLabel(state.nextStp))
+      ? (state.nextStp.template_id != null
+          ? (state.templateNames.get(state.nextStp.template_id) ?? stepLabel(state.nextStp))
+          : stepLabel(state.nextStp))
       : null
 
     return (
       <main className="content has-dock">
         <Greeting
           isNight={isNight}
+          dateStr={dateStr}
           templateName={templateNameForGreeting}
           nextTemplateName={nextTemplateName}
         />
-        <CycleCards cycle={state.cycle} templateNames={new Map()} />
+        <CycleCards cycle={state.cycle} templateNames={state.templateNames} />
         <RunRestMarker step={state.currentStep} />
         <BodyWeightTile bw={state.bw} />
         <AskAIRow />
@@ -333,6 +361,7 @@ export default function Today() {
     <main className="content has-dock">
       <Greeting
         isNight={isNight}
+        dateStr={dateStr}
         templateName={state.currentTemplate.name}
         nextTemplateName={nextTemplateName}
       />

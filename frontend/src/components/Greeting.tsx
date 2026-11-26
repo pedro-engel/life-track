@@ -1,6 +1,12 @@
 interface GreetingProps {
   /** Whether to show the night variant ("Boa noite"). */
   isNight: boolean
+  /**
+   * Pre-formatted date string (e.g. "quinta-feira, 26 de novembro").
+   * Computed once in Today.tsx alongside isNight so the two are always
+   * derived from the same Date instance and cannot straddle midnight.
+   */
+  dateStr: string
   /** Template name for today's step (lowercase in line). null for run/rest. */
   templateName: string | null
   /** Template name for tomorrow's step. null if unknown. */
@@ -12,14 +18,7 @@ interface GreetingProps {
  * Morning: "Bom dia, Pedro.\n[date]. Hoje é dia de **peito**."
  * Night:   "Boa noite, Pedro.\nAmanhã é dia de **costas**."
  */
-export function Greeting({ isNight, templateName, nextTemplateName }: GreetingProps) {
-  const now = new Date()
-  const dateStr = now.toLocaleDateString('pt-BR', {
-    weekday: 'long',
-    day: 'numeric',
-    month: 'long',
-  })
-
+export function Greeting({ isNight, dateStr, templateName, nextTemplateName }: GreetingProps) {
   return (
     <section className="greeting">
       <h1 style={{ fontFamily: 'var(--serif)', fontWeight: 400, fontSize: '28px', lineHeight: 1.08, margin: 0, color: 'var(--text)' }}>
