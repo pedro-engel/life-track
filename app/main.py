@@ -6,6 +6,7 @@ from app.routers import exercises as exercises_router
 from app.routers import templates as templates_router
 from app.routers import cycle as cycle_router
 from app.routers import sessions as sessions_router
+from app.routers import progress as progress_router
 
 
 @asynccontextmanager
@@ -21,6 +22,7 @@ app.include_router(exercises_router.router)
 app.include_router(templates_router.router)
 app.include_router(cycle_router.router)
 app.include_router(sessions_router.router)
+app.include_router(progress_router.router)
 
 
 @app.get("/health")
