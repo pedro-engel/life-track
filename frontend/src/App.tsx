@@ -3,6 +3,7 @@ import './styles/tokens.css'
 import { AuthProvider } from './auth/useAuth'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import Login from './screens/Login'
+import Progress from './screens/Progress'
 import Today from './screens/Today'
 import Workout from './screens/Workout'
 
@@ -48,6 +49,16 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Workout />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Progress screen — protected */}
+      <Route
+        path="/progress"
+        element={
+          <ProtectedRoute>
+            <Progress />
           </ProtectedRoute>
         }
       />
