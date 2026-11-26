@@ -19,7 +19,8 @@ describe('API client', () => {
       json: () => Promise.resolve({ token: 'jwt' }),
     } as Response)
 
-    await login('pw')
+    const token = await login('pw')
+    expect(token).toBe('jwt')
     expect(getToken()).toBe('jwt')
   })
 

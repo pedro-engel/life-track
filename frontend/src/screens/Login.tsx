@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import { login } from '../api/client'
+import { AuthError, login } from '../api/client'
+import { useAuth } from '../auth/useAuth'
 
 interface LoginProps {
   onAuthenticated: () => void
 }
 
 export default function Login({ onAuthenticated }: LoginProps) {
+  const { signIn } = useAuth()
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
@@ -15,10 +17,15 @@ export default function Login({ onAuthenticated }: LoginProps) {
     setError(null)
     setLoading(true)
     try {
-      await login(password)
+      const token = await login(password)
+      signIn(token)
       onAuthenticated()
-    } catch {
-      setError('Incorrect password. Please try again.')
+    } catch (e) {
+      if (e instanceof AuthError) {
+        setError('Incorrect password. Please try again.')
+      } else {
+        setError('Something went wrong. Please try again.')
+      }
     } finally {
       setLoading(false)
     }

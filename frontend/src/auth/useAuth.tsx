@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useState } from 'react'
 import { clearToken, getToken, setToken } from './token'
 
 interface AuthContextValue {
@@ -21,6 +21,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     clearToken()
     setIsAuthenticated(false)
   }, [])
+
+  // Listen for the "auth:unauthorized" event dispatched by request() on any
+  // 401 response.  Calling signOut() here flips isAuthenticated to false,
+  // which causes ProtectedRoute to re-render and redirect to /login.
+  useEffect(() => {
+    const handle = () => signOut()
+    window.addEventListener('auth:unauthorized', handle)
+    return () => window.removeEventListener('auth:unauthorized', handle)
+  }, [signOut])
 
   return (
     <AuthContext.Provider value={{ isAuthenticated, signIn, signOut }}>

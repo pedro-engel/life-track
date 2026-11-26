@@ -6,8 +6,6 @@ import type {
   LastSet,
   ProgressPoint,
   SessionResponse,
-  SetEntryOut,
-  StepResponse,
   TemplateResponse,
 } from './types'
 
@@ -37,6 +35,11 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 
   if (res.status === 401) {
     clearToken()
+    // Notify AuthProvider (and any other listeners) so they can flip auth state
+    // and redirect to /login — works from any mounted screen without coupling.
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('auth:unauthorized'))
+    }
     throw new AuthError()
   }
 
@@ -52,8 +55,8 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
 // Auth
 // ---------------------------------------------------------------------------
 
-/** POST /auth/login — stores the returned JWT in localStorage. */
-export async function login(password: string): Promise<void> {
+/** POST /auth/login — stores the returned JWT in localStorage and returns it. */
+export async function login(password: string): Promise<string> {
   const res = await fetch('/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -71,6 +74,7 @@ export async function login(password: string): Promise<void> {
 
   const data = (await res.json()) as { token: string }
   setToken(data.token)
+  return data.token
 }
 
 // ---------------------------------------------------------------------------
@@ -184,6 +188,17 @@ export function getProgress(exerciseId: number): Promise<ProgressPoint[]> {
 // Sessions
 // ---------------------------------------------------------------------------
 
+/** Input shape for each set when syncing a session — note is optional. */
+export interface SetEntryIn {
+  id: string
+  exercise_id: number
+  position: number
+  weight: number
+  reps: number
+  note?: string | null
+  completed: boolean
+}
+
 export interface SyncSessionPayload {
   session: {
     id: string
@@ -191,7 +206,7 @@ export interface SyncSessionPayload {
     template_id?: number | null
     finished_at?: string | null
   }
-  sets: Omit<SetEntryOut, 'session_id'>[]
+  sets: SetEntryIn[]
 }
 
 export function syncSession(payload: SyncSessionPayload): Promise<SessionResponse> {
