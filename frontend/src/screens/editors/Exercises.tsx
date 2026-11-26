@@ -337,7 +337,7 @@ const btnGhostStyle: React.CSSProperties = {
 }
 
 const btnGhostSmallStyle: React.CSSProperties = {
-  height: 32,
+  minHeight: 44,
   padding: '0 12px',
   borderRadius: 'var(--radius-control)',
   background: 'transparent',

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { getCycle, listTemplates, putCycle } from '../../api/client'
 import type { CycleGetResponse, TemplateResponse } from '../../api/types'
 
@@ -14,11 +14,6 @@ interface DraftStep {
   kind: StepKind
   /** Only valid when kind === 'template'; undefined otherwise */
   template_id?: number
-}
-
-let _keyCounter = 0
-function nextKey(): number {
-  return ++_keyCounter
 }
 
 // ---------------------------------------------------------------------------
@@ -179,6 +174,12 @@ function StepItem({
 // ---------------------------------------------------------------------------
 
 export default function CycleEditor() {
+  const keyRef = useRef(0)
+  function nextKey(): number {
+    keyRef.current += 1
+    return keyRef.current
+  }
+
   const [state, setState] = useState<ScreenState>({ status: 'loading' })
   const [steps, setSteps] = useState<DraftStep[]>([])
   const [addingTemplate, setAddingTemplate] = useState(false)
@@ -416,7 +417,7 @@ const btnAccentStyle: React.CSSProperties = {
 }
 
 const btnAccentSmallStyle: React.CSSProperties = {
-  height: 36,
+  minHeight: 44,
   padding: '0 16px',
   borderRadius: 'var(--radius-control)',
   background: 'var(--accent)',
@@ -429,7 +430,7 @@ const btnAccentSmallStyle: React.CSSProperties = {
 }
 
 const btnGhostSmallStyle: React.CSSProperties = {
-  height: 36,
+  minHeight: 44,
   padding: '0 12px',
   borderRadius: 'var(--radius-control)',
   background: 'transparent',
@@ -441,7 +442,7 @@ const btnGhostSmallStyle: React.CSSProperties = {
 }
 
 const btnChipStyle: React.CSSProperties = {
-  height: 36,
+  minHeight: 44,
   padding: '0 14px',
   borderRadius: 'var(--radius-control)',
   background: 'var(--surface)',
@@ -453,8 +454,8 @@ const btnChipStyle: React.CSSProperties = {
 }
 
 const btnRemoveStyle: React.CSSProperties = {
-  width: 28,
-  height: 28,
+  minWidth: 44,
+  minHeight: 44,
   borderRadius: '50%',
   background: 'transparent',
   color: 'var(--muted)',
@@ -464,4 +465,7 @@ const btnRemoveStyle: React.CSSProperties = {
   cursor: 'pointer',
   padding: 0,
   flexShrink: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
 }

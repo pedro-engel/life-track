@@ -176,6 +176,7 @@ function TemplateForm({
 export default function Templates() {
   const [state, setState] = useState<ScreenState>({ status: 'loading' })
   const [formMode, setFormMode] = useState<FormMode>({ kind: 'create' })
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   async function load() {
     try {
@@ -201,8 +202,14 @@ export default function Templates() {
   }, [])
 
   async function handleDelete(id: number) {
-    await deleteTemplate(id)
-    load()
+    setDeleteError(null)
+    try {
+      await deleteTemplate(id)
+    } catch {
+      setDeleteError('Erro ao excluir. Tente novamente.')
+      return
+    }
+    await load()
   }
 
   function handleDone() {
@@ -236,6 +243,11 @@ export default function Templates() {
 
       {/* Template list */}
       <section className="panel" aria-label="Lista de templates">
+        {deleteError && (
+          <span role="alert" style={{ color: 'var(--negative)', fontSize: 'var(--fs-small)', display: 'block', marginBottom: 8 }}>
+            {deleteError}
+          </span>
+        )}
         {templates.length === 0 ? (
           <p style={{ color: 'var(--muted)', fontSize: 'var(--fs-body)', margin: 0 }}>
             Nenhum template ainda.
@@ -367,7 +379,7 @@ const btnGhostStyle: React.CSSProperties = {
 }
 
 const btnGhostSmallStyle: React.CSSProperties = {
-  height: 32,
+  minHeight: 44,
   padding: '0 12px',
   borderRadius: 'var(--radius-control)',
   background: 'transparent',
@@ -379,7 +391,7 @@ const btnGhostSmallStyle: React.CSSProperties = {
 }
 
 const btnDangerSmallStyle: React.CSSProperties = {
-  height: 32,
+  minHeight: 44,
   padding: '0 12px',
   borderRadius: 'var(--radius-control)',
   background: 'transparent',
@@ -391,7 +403,7 @@ const btnDangerSmallStyle: React.CSSProperties = {
 }
 
 const btnChipStyle: React.CSSProperties = {
-  height: 32,
+  minHeight: 44,
   padding: '0 12px',
   borderRadius: 'var(--radius-control)',
   background: 'var(--surface)',
@@ -403,8 +415,8 @@ const btnChipStyle: React.CSSProperties = {
 }
 
 const btnRemoveStyle: React.CSSProperties = {
-  width: 24,
-  height: 24,
+  minWidth: 44,
+  minHeight: 44,
   borderRadius: '50%',
   background: 'transparent',
   color: 'var(--muted)',

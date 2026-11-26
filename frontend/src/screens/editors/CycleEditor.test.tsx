@@ -127,8 +127,8 @@ describe('CycleEditor', () => {
       const confirmBtn = screen.getByRole('button', { name: /confirmar template/i })
       await userEvent.click(confirmBtn)
 
-      // The step must NOT have been added — no step in the list
-      expect(screen.queryByText(/passo adicionado/i)).not.toBeInTheDocument()
+      // The step must NOT have been added — step counter still shows 0
+      expect(screen.getByText('0 passos')).toBeInTheDocument()
       // putCycle must not have been called
       expect(client.putCycle).not.toHaveBeenCalled()
 

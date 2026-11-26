@@ -104,11 +104,8 @@ describe('Templates editor', () => {
       await userEvent.click(saveBtn)
 
       await waitFor(() => {
-        // The original list has [3], we added Supino [1] → new list should include Supino
-        expect(client.updateTemplate).toHaveBeenCalledWith(
-          10,
-          expect.objectContaining({ exercise_ids: expect.arrayContaining([1]) }),
-        )
+        // The original list has [3] (Remada), we added Supino [1] → exact order: [3, 1]
+        expect(client.updateTemplate).toHaveBeenCalledWith(10, { name: 'Costas A', exercise_ids: [3, 1] })
       })
     })
   })
@@ -133,6 +130,34 @@ describe('Templates editor', () => {
       await waitFor(() => {
         expect(client.deleteTemplate).toHaveBeenCalledWith(7)
       })
+    })
+  })
+
+  describe('delete failure', () => {
+    it('shows an error alert and keeps the item when deleteTemplate rejects', async () => {
+      vi.mocked(client.listTemplates).mockResolvedValue([
+        { id: 7, name: 'Ombros', exercises: [] },
+      ])
+      vi.mocked(client.listExercises).mockResolvedValue([])
+      vi.mocked(client.deleteTemplate).mockRejectedValueOnce(new Error('Network error'))
+
+      renderTemplates()
+
+      await waitFor(() => {
+        expect(screen.getByText('Ombros')).toBeInTheDocument()
+      })
+
+      const deleteBtn = screen.getByRole('button', { name: /excluir ombros/i })
+      await userEvent.click(deleteBtn)
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toBeInTheDocument()
+      })
+
+      // Item is still visible — not removed on failure
+      expect(screen.getByText('Ombros')).toBeInTheDocument()
+      // deleteTemplate was called
+      expect(client.deleteTemplate).toHaveBeenCalledWith(7)
     })
   })
 })
