@@ -1,0 +1,81 @@
+/* life-track design tokens — reproduced from the approved prototype (life.css).
+   Instrument Sans (body) + Instrument Serif (greeting only) from Google Fonts.
+   No shadows at rest.
+*/
+@import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wght@0,400..700;1,400..700&family=Instrument+Serif:ital@0;1&display=swap');
+
+:root {
+  /* Surfaces */
+  --ground: #ffffff;
+  --surface: #f9f9f9;
+  --raised: #ffffff;
+  --border: #eaeaea;
+  --rule: #f3f3f3;
+  --control: #d9d9d6;
+
+  /* Text */
+  --text: #1f201d;
+  --muted: #636361;
+  --faint: #6b6b6b;
+
+  /* Brand — teal for data/actions only */
+  --accent: #1b6e66;
+  --primary: #1f201d;
+  --primary-ink: #ffffff;
+
+  /* Semantic */
+  --positive: #2e7d32;
+  --negative: #b42318;
+  --warning: #92400e;
+
+  /* Chart palette */
+  --chart-1: #1b6e66;
+  --chart-2: #8c8c88;
+  --chart-muted: #cfd3d6;
+
+  /* Pill states */
+  --pill-positive-bg: #dcfae5;
+  --pill-positive-ink: #04250e;
+  --pill-negative-bg: #fdecea;
+  --pill-negative-ink: #7a1d14;
+  --pill-neutral-bg: #f3f3f3;
+  --pill-neutral-ink: #3d3d3a;
+
+  /* Axes */
+  --grid: #f0efed;
+  --axis-ink: #636361;
+
+  /* Shape */
+  --radius-card: 22px;
+  --radius-control: 999px;
+  --gap: 16px;
+
+  /* Typography */
+  --font: "Instrument Sans", Inter, system-ui, -apple-system, sans-serif;
+  --serif: "Instrument Serif", Georgia, serif;
+  --fs-title: 48px;
+  --fs-section: 14px;
+  --fs-kpi: 32px;
+  --fs-body: 14px;
+  --fs-small: 12px;
+
+  /* Safe areas (mobile) */
+  --safe-t: env(safe-area-inset-top, 0px);
+  --safe-b: env(safe-area-inset-bottom, 0px);
+}
+
+/* Apply font directly on body so the value is testable via getComputedStyle in jsdom */
+body {
+  margin: 0;
+  background: var(--ground);
+  font-family: "Instrument Sans", Inter, system-ui, -apple-system, sans-serif;
+  color: var(--text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}

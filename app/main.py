@@ -1,6 +1,9 @@
 import warnings
 from contextlib import asynccontextmanager
+from pathlib import Path
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.db import init_db
 from app.config import get_settings, InsecureDefaultKeyWarning
 from app.routers import auth as auth_router
@@ -12,6 +15,43 @@ from app.routers import progress as progress_router
 from app.routers import bodyweight as bodyweight_router
 
 _DEFAULT_JWT_SECRET = "test-jwt-secret"
+
+# Path to the built frontend SPA.  Relative to this file: ../../frontend/dist
+FRONTEND_DIST = str(Path(__file__).parent.parent / "frontend" / "dist")
+
+
+class _SPAStaticFiles(StaticFiles):
+    """StaticFiles subclass that falls back to index.html for unknown paths.
+
+    This enables React Router to handle client-side navigation: any path that
+    does not resolve to a real file is served the SPA shell, which then renders
+    the correct screen based on the URL.
+    """
+
+    async def get_response(self, path: str, scope):  # type: ignore[override]
+        try:
+            return await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            if exc.status_code == 404:
+                return await super().get_response("index.html", scope)
+            raise
+
+
+def _mount_spa(dist_path: str | None = None) -> None:
+    """Mount the built SPA at '/'.
+
+    Safe to call multiple times — removes any existing 'spa' mount first so
+    tests can remount with a stub directory.  Guards on directory existence so
+    the backend still boots in dev/test when no frontend build is present.
+    """
+    target = Path(dist_path or FRONTEND_DIST)
+    if not target.exists():
+        return
+    # Remove an existing spa mount (idempotent for test remounting)
+    app.router.routes = [
+        r for r in app.router.routes if getattr(r, "name", None) != "spa"
+    ]
+    app.mount("/", _SPAStaticFiles(directory=str(target), html=True), name="spa")
 
 
 @asynccontextmanager
@@ -31,6 +71,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Strength Tracker API", lifespan=lifespan)
 
+# API routers — declared before the static mount so they always win.
 app.include_router(auth_router.router)
 app.include_router(exercises_router.router)
 app.include_router(templates_router.router)
@@ -43,3 +84,8 @@ app.include_router(bodyweight_router.router)
 @app.get("/health")
 def health_check():
     return {"status": "ok"}
+
+
+# Mount the built SPA at '/'.  This is a no-op when the dist directory does
+# not yet exist (dev mode / CI without a frontend build).
+_mount_spa()
