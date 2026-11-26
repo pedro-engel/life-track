@@ -10,7 +10,7 @@ All endpoints require a valid ``Authorization: Bearer <token>`` header.
 """
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -32,7 +32,7 @@ _SINGLETON_ID = 1
 
 
 class StepInput(BaseModel):
-    kind: str  # "template" | "run" | "rest"
+    kind: Literal["template", "run", "rest"]
     template_id: Optional[int] = None
 
 
@@ -120,6 +120,14 @@ def put_cycle(
                     detail="Steps of kind 'template' must include a template_id",
                 )
             _validate_template_id(step.template_id, session)
+        elif step.template_id is not None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail=(
+                    f"Steps of kind '{step.kind}' must not include a template_id; "
+                    "template_id is only valid for kind='template'"
+                ),
+            )
 
     # Delete existing steps
     for existing in _load_steps(session):
@@ -191,10 +199,20 @@ def advance_cycle(
             detail="Cycle has no steps; cannot advance",
         )
 
+    completed_step_position = body.completed_step_position
+    if not (0 <= completed_step_position < len(steps)):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail=(
+                f"completed_step_position {completed_step_position} is out of range "
+                f"[0, {len(steps) - 1}]"
+            ),
+        )
+
     state = _get_or_create_state(session)
     new_ptr = next_pointer(
         current=state.pointer,
-        completed_position=body.completed_step_position,
+        completed_position=completed_step_position,
         length=len(steps),
     )
     state.pointer = new_ptr

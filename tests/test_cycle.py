@@ -246,3 +246,71 @@ def test_advance_cycle_updates_pointer(auth_client):
     )
     assert resp2.status_code == 200
     assert resp2.json()["pointer"] == 0
+
+
+# ---------------------------------------------------------------------------
+# Tests for review findings (task-6 fix)
+# ---------------------------------------------------------------------------
+
+
+def test_put_cycle_rejects_invalid_kind(auth_client):
+    """PUT /cycle with an unrecognised kind returns 422."""
+    token = get_token(auth_client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = auth_client.put(
+        "/cycle",
+        json={"steps": [{"kind": "workout"}]},
+        headers=headers,
+    )
+    assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+
+
+def test_put_cycle_rejects_template_id_on_non_template_step(auth_client):
+    """PUT /cycle with kind='run' and a non-null template_id returns 422."""
+    token = get_token(auth_client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    resp = auth_client.put(
+        "/cycle",
+        json={"steps": [{"kind": "run", "template_id": 42}]},
+        headers=headers,
+    )
+    assert resp.status_code == 422, f"Expected 422, got {resp.status_code}: {resp.text}"
+
+
+def test_advance_rejects_out_of_range_position(auth_client):
+    """POST /cycle/advance returns 422 for positions outside [0, len-1]."""
+    token = get_token(auth_client)
+    headers = {"Authorization": f"Bearer {token}"}
+
+    # Set up a 3-step cycle
+    auth_client.put(
+        "/cycle",
+        json={"steps": [
+            {"kind": "run"},
+            {"kind": "rest"},
+            {"kind": "run"},
+        ]},
+        headers=headers,
+    )
+
+    # Negative position
+    resp_neg = auth_client.post(
+        "/cycle/advance",
+        json={"completed_step_position": -1},
+        headers=headers,
+    )
+    assert resp_neg.status_code == 422, (
+        f"Expected 422 for position=-1, got {resp_neg.status_code}: {resp_neg.text}"
+    )
+
+    # Position >= len (cycle has 3 steps, so position 3 is out of range)
+    resp_over = auth_client.post(
+        "/cycle/advance",
+        json={"completed_step_position": 99},
+        headers=headers,
+    )
+    assert resp_over.status_code == 422, (
+        f"Expected 422 for position=99, got {resp_over.status_code}: {resp_over.text}"
+    )
