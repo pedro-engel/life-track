@@ -79,6 +79,12 @@ async def _spa_exception_handler(request: Request, exc: StarletteHTTPException):
     FastAPI handler, so auth errors, validation errors, etc. are unaffected.
     """
     if exc.status_code == 404:
+        # Only serve the SPA fallback for GET requests.
+        # Non-GET requests to unknown paths (e.g. a future POST /ask before it
+        # is registered) should receive a JSON 404, not the SPA HTML shell.
+        if request.method != "GET":
+            return await _default_http_handler(request, exc)
+
         dist = Path(FRONTEND_DIST)
         if dist.exists():
             rel = request.url.path.lstrip("/")
@@ -87,7 +93,7 @@ async def _spa_exception_handler(request: Request, exc: StarletteHTTPException):
             dist_resolved = dist.resolve()
             if (
                 candidate.is_file()
-                and str(candidate).startswith(str(dist_resolved))
+                and candidate.is_relative_to(dist_resolved)
             ):
                 return FileResponse(str(candidate))
             # --- SPA navigation fallback (belt-and-suspenders API guard) ---

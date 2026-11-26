@@ -169,5 +169,67 @@ describe('Today screen', () => {
       const link = screen.getByRole('link', { name: /monte seu ciclo/i })
       expect(link).toBeInTheDocument()
     })
+
+    it('empty-cycle CTA points at /editors/cycle', async () => {
+      vi.mocked(client.getCycle).mockResolvedValueOnce({
+        steps: [],
+        pointer: 0,
+        next: null,
+      })
+
+      renderToday()
+
+      await waitFor(() => {
+        expect(screen.getByRole('link', { name: /monte seu ciclo/i })).toBeInTheDocument()
+      })
+      const link = screen.getByRole('link', { name: /monte seu ciclo/i })
+      expect(link).toHaveAttribute('href', '/editors/cycle')
+    })
+  })
+
+  describe('error isolation for getLastSet', () => {
+    beforeEach(() => {
+      vi.useFakeTimers({ toFake: ['Date'] })
+      vi.setSystemTime(new Date('2026-11-26T09:00:00'))
+    })
+
+    it('a single failed getLastSet still renders the plan (shows "primeira vez"), not error screen', async () => {
+      vi.mocked(client.getCycle).mockResolvedValueOnce({
+        steps: [
+          { position: 0, kind: 'template', template_id: 1 },
+          { position: 1, kind: 'template', template_id: 2 },
+        ],
+        pointer: 0,
+        next: { position: 1, kind: 'template', template_id: 2 },
+      })
+      vi.mocked(client.getTemplate).mockImplementation(async (id) => {
+        if (id === 1)
+          return {
+            id: 1,
+            name: 'Peito',
+            exercises: [
+              { id: 10, name: 'Supino', muscle_group: 'chest', description: null, is_custom: false },
+              { id: 11, name: 'Crucifixo', muscle_group: 'chest', description: null, is_custom: false },
+            ],
+          }
+        return { id: 2, name: 'Costas', exercises: [] }
+      })
+      // Exercise 10 returns a value; exercise 11 throws (simulates network error)
+      vi.mocked(client.getLastSet).mockImplementation(async (exerciseId) => {
+        if (exerciseId === 10) return { weight: 60, reps: 8, note: null, session_date: '2024-01-01' }
+        throw new Error('Network error')
+      })
+      vi.mocked(client.listBodyweight).mockResolvedValueOnce([])
+
+      renderToday()
+
+      // Should show plan, NOT the error screen
+      await waitFor(() => {
+        expect(screen.queryByText(/algo deu errado/i)).not.toBeInTheDocument()
+        expect(screen.getByText(/supino/i)).toBeInTheDocument()
+      })
+      // The failing exercise should show "primeira vez" fallback
+      expect(screen.getByText(/primeira vez/i)).toBeInTheDocument()
+    })
   })
 })

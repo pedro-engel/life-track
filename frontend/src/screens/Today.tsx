@@ -198,7 +198,7 @@ export default function Today() {
           // the real workout name on the Amanhã card (not the generic "Treino").
           const nextTemplatePromise: Promise<TemplateResponse | null> =
             nextStp?.kind === 'template' && nextStp.template_id != null
-              ? getTemplate(nextStp.template_id)
+              ? getTemplate(nextStp.template_id).catch(() => null)
               : Promise.resolve(null)
 
           const [bw, nextTemplate] = await Promise.all([listBodyweight(), nextTemplatePromise])
@@ -221,10 +221,12 @@ export default function Today() {
 
         // Fetch next template name + last sets in parallel
         const [nextTemplate, lastSetPairs] = await Promise.all([
-          fetchNextTemplate(nextStp, currentStep.template_id!),
+          fetchNextTemplate(nextStp, currentStep.template_id!).catch(() => null),
           Promise.all(
             currentTemplate.exercises.map((ex) =>
-              getLastSet(ex.id, 1).then((ls) => [ex.id, ls] as const),
+              getLastSet(ex.id, 1)
+                .then((ls) => [ex.id, ls] as const)
+                .catch(() => [ex.id, null] as const),
             ),
           ),
         ])
@@ -306,7 +308,7 @@ export default function Today() {
           <p style={{ color: 'var(--muted)', marginBottom: '16px', fontSize: 'var(--fs-body)' }}>
             Você ainda não tem um ciclo configurado.
           </p>
-          <Link to="/cycle" className="cta">
+          <Link to="/editors/cycle" className="cta">
             monte seu ciclo
           </Link>
         </section>

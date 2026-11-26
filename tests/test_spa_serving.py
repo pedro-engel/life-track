@@ -124,3 +124,16 @@ def test_protected_nonprefix_route_returns_401_not_spa(dist_client):
     response = dist_client.get("/zzz-protected")
     assert response.status_code == 401
     assert '<div id="root">' not in response.text
+
+
+def test_non_get_unregistered_path_returns_json_404(dist_client):
+    """A POST (or other non-GET) to an unregistered path must return JSON 404,
+    not the SPA index.html.
+
+    This ensures that future endpoints like POST /ask don't silently receive
+    the HTML shell before the route is registered.
+    """
+    response = dist_client.post("/totally-unknown-path")
+    assert response.status_code == 404
+    assert response.headers.get("content-type", "").startswith("application/json")
+    assert '<div id="root">' not in response.text
