@@ -1,8 +1,9 @@
 import warnings
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
+from fastapi import FastAPI, Request
+from fastapi.responses import FileResponse
+from fastapi.exception_handlers import http_exception_handler as _default_http_handler
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.db import init_db
 from app.config import get_settings, InsecureDefaultKeyWarning
@@ -18,6 +19,12 @@ _DEFAULT_JWT_SECRET = "test-jwt-secret"
 
 # Path to the built frontend SPA.  Relative to this file: ../../frontend/dist
 FRONTEND_DIST = str(Path(__file__).parent.parent / "frontend" / "dist")
+
+# Known API path segments — belt-and-suspenders guard so that 404s on paths
+# like /auth/unknown-route are never served the SPA shell.
+_API_PREFIXES = frozenset(
+    ("auth", "exercises", "templates", "cycle", "sessions", "bodyweight", "health")
+)
 
 
 @asynccontextmanager
@@ -37,7 +44,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Strength Tracker API", lifespan=lifespan)
 
-# API routers — declared before the static mount so they always win.
+# API routers declared before the exception handler so they always run first.
 app.include_router(auth_router.router)
 app.include_router(exercises_router.router)
 app.include_router(templates_router.router)
@@ -52,59 +59,41 @@ def health_check():
     return {"status": "ok"}
 
 
-# Top-level path segments that belong to the API — their 404s must not be
-# swallowed by the SPA fallback.
-_API_PREFIXES = frozenset(
-    ("auth", "exercises", "templates", "cycle", "sessions", "bodyweight", "health")
-)
+@app.exception_handler(StarletteHTTPException)
+async def _spa_exception_handler(request: Request, exc: StarletteHTTPException):
+    """Single-page-app serving + pass-through for all HTTP exceptions.
 
+    Why an exception handler instead of app.mount("/", StaticFiles(...)):
+    A Mount at "/" is added to app.router.routes and shadows every route
+    registered *after* it (e.g. the throwaway test route in test_auth.py, and
+    any future endpoint).  An exception handler fires only after the entire
+    route table has been tried, so every registered route — regardless of when
+    it was added — always runs and returns its real status code.
 
-class _SPAStaticFiles(StaticFiles):
-    """StaticFiles subclass that falls back to index.html for unknown paths.
+    Logic for 404s when frontend/dist exists:
+    1. Real static file (assets, favicon, manifest…) → serve it via FileResponse.
+    2. Known API prefix (/auth/…, /exercises/…, etc.) → pass through as JSON 404.
+    3. Everything else (SPA navigation paths like /today, /log) → serve index.html.
 
-    This enables React Router to handle client-side navigation: any path that
-    does not resolve to a real file is served the SPA shell, which then renders
-    the correct screen based on the URL.
-
-    Paths whose first segment is a known API prefix are NOT caught here — their
-    404s propagate to FastAPI's exception handler and return JSON, so callers
-    get a proper API error rather than the SPA shell.
+    Non-404 exceptions (401, 422, 500, …) always pass through to the default
+    FastAPI handler, so auth errors, validation errors, etc. are unaffected.
     """
+    if exc.status_code == 404:
+        dist = Path(FRONTEND_DIST)
+        if dist.exists():
+            rel = request.url.path.lstrip("/")
+            # --- real static file? ---
+            candidate = (dist / rel).resolve() if rel else dist.resolve()
+            dist_resolved = dist.resolve()
+            if (
+                candidate.is_file()
+                and str(candidate).startswith(str(dist_resolved))
+            ):
+                return FileResponse(str(candidate))
+            # --- SPA navigation fallback (belt-and-suspenders API guard) ---
+            top_segment = request.url.path.lstrip("/").split("/")[0]
+            if top_segment not in _API_PREFIXES:
+                return FileResponse(str(dist / "index.html"))
 
-    async def get_response(self, path: str, scope):  # type: ignore[override]
-        try:
-            return await super().get_response(path, scope)
-        except StarletteHTTPException as exc:
-            if exc.status_code == 404:
-                # Don't swallow 404s for API paths — let FastAPI return JSON.
-                # Use scope["path"] (the raw URL, always forward-slash) rather
-                # than the OS-normalised `path` parameter which uses backslashes
-                # on Windows (StaticFiles.get_path calls os.path.normpath).
-                url_path: str = scope.get("path", "")
-                top_segment = url_path.lstrip("/").split("/")[0]
-                if top_segment in _API_PREFIXES:
-                    raise
-                return await super().get_response("index.html", scope)
-            raise
-
-
-def _mount_spa(dist_path: str | None = None) -> None:
-    """Mount the built SPA at '/'.
-
-    Safe to call multiple times — removes any existing 'spa' mount first so
-    tests can remount with a stub directory.  Guards on directory existence so
-    the backend still boots in dev/test when no frontend build is present.
-    """
-    target = Path(dist_path or FRONTEND_DIST)
-    if not target.exists():
-        return
-    # Remove an existing spa mount (idempotent for test remounting)
-    app.router.routes = [
-        r for r in app.router.routes if getattr(r, "name", None) != "spa"
-    ]
-    app.mount("/", _SPAStaticFiles(directory=str(target), html=True), name="spa")
-
-
-# Mount the built SPA at '/'.  This is a no-op when the dist directory does
-# not yet exist (dev mode / CI without a frontend build).
-_mount_spa()
+    # All other HTTP exceptions (401, 403, 404 on API paths, 422, …) → JSON.
+    return await _default_http_handler(request, exc)

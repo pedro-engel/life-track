@@ -1,15 +1,21 @@
 """Tests for FastAPI serving the built React SPA.
 
-The backend mounts frontend/dist at '/' (after all API routers) so that:
-- API and /health routes still resolve normally (declared before the mount).
-- Unknown paths (client-side routes like /today) fall back to index.html.
+The backend uses a 404 exception handler (not a greedy Mount at '/') so that:
+- Every registered API/app route always runs and returns its real status code,
+  regardless of when the route was added relative to module load.
+- Real static assets in frontend/dist are served via FileResponse.
+- Genuinely unmatched navigation paths (e.g. /today) fall back to index.html.
+- Known API paths (e.g. /auth/unknown) return JSON 404, not the SPA shell.
 """
 import os
 import pytest
+from fastapi import Depends
 from sqlmodel import SQLModel, Session, create_engine
+
 import app.db as db_module
 import app.main as main_module
 from app.main import app
+from app.auth import require_auth
 from app.db import get_session
 from app.config import get_settings
 from fastapi.testclient import TestClient
@@ -23,17 +29,29 @@ STUB_HTML = """\
 </html>
 """
 
+# ---------------------------------------------------------------------------
+# Throwaway protected route at a path NOT covered by _API_PREFIXES.
+# Registered once at module load — the exception-handler approach means this
+# route is always reachable regardless of when it is registered vs the handler.
+# ---------------------------------------------------------------------------
+@app.get("/zzz-protected")
+def _zzz_protected(sub: str = Depends(require_auth)):
+    return {"subject": sub}
+
 
 @pytest.fixture()
-def dist_client(tmp_path):
-    """TestClient with a stub frontend/dist and the SPA mounted."""
+def dist_client(tmp_path, monkeypatch):
+    """TestClient whose FRONTEND_DIST points at a stub dist directory."""
     dist_dir = tmp_path / "dist"
     dist_dir.mkdir()
     (dist_dir / "index.html").write_text(STUB_HTML, encoding="utf-8")
 
+    # Patch FRONTEND_DIST so the exception handler reads from our stub dir.
+    monkeypatch.setattr(main_module, "FRONTEND_DIST", str(dist_dir))
+
     # DB setup (mirrors conftest.py client_fixture)
     db_path = tmp_path / "test.db"
-    os.environ["JWT_SECRET"] = "test-spa-serving-32bytes!!"
+    monkeypatch.setenv("JWT_SECRET", "test-spa-serving-32bytes!!")
     get_settings.cache_clear()
 
     test_engine = create_engine(
@@ -50,21 +68,13 @@ def dist_client(tmp_path):
 
     app.dependency_overrides[get_session] = override_get_session
 
-    # Mount the stub SPA (function defined in main.py)
-    main_module._mount_spa(str(dist_dir))
-
     with TestClient(app) as client:
         yield client
 
-    # Teardown
+    # Teardown — no mount to remove; just clean up DB state.
     app.dependency_overrides.clear()
     db_module.engine = original_engine
     test_engine.dispose()
-    # Remove the spa mount so it doesn't leak into subsequent tests
-    app.router.routes = [
-        r for r in app.router.routes if getattr(r, "name", None) != "spa"
-    ]
-    os.environ.pop("JWT_SECRET", None)
     get_settings.cache_clear()
 
 
@@ -76,7 +86,7 @@ def test_root_serves_index(dist_client):
 
 
 def test_health_still_ok(dist_client):
-    """GET /health must still return {'status':'ok'} — not shadowed by static mount."""
+    """GET /health must still return {'status':'ok'} — not shadowed by SPA handler."""
     response = dist_client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
@@ -97,4 +107,20 @@ def test_api_404_is_not_swallowed(dist_client):
     """
     response = dist_client.get("/auth/does-not-exist-at-all")
     assert response.headers.get("content-type", "").startswith("application/json")
+    assert '<div id="root">' not in response.text
+
+
+def test_protected_nonprefix_route_returns_401_not_spa(dist_client):
+    """A protected route outside _API_PREFIXES must return 401, not index.html.
+
+    Regression for the greedy-mount bug: when frontend/dist exists, routes
+    added after app.main loads (e.g. test helpers, Phase-2 /ask endpoint) must
+    still run and return their real status codes — the SPA fallback must only
+    fire for paths with *no* matching route.
+    """
+    # /zzz-protected is registered above at module level and uses require_auth.
+    # Its prefix "zzz" is NOT in _API_PREFIXES, so without the exception-handler
+    # approach the old Mount-at-'/' would have served index.html instead.
+    response = dist_client.get("/zzz-protected")
+    assert response.status_code == 401
     assert '<div id="root">' not in response.text
