@@ -2,6 +2,9 @@ import { BrowserRouter, Navigate, Route, Routes, useNavigate } from 'react-route
 import './styles/tokens.css'
 import { AuthProvider } from './auth/useAuth'
 import { ProtectedRoute } from './components/ProtectedRoute'
+import CycleEditor from './screens/editors/CycleEditor'
+import Exercises from './screens/editors/Exercises'
+import Templates from './screens/editors/Templates'
 import Login from './screens/Login'
 import Progress from './screens/Progress'
 import Today from './screens/Today'
@@ -36,6 +39,32 @@ function AppRoutes() {
         element={
           <ProtectedRoute>
             <Today />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Editors — protected */}
+      <Route
+        path="/editors/exercises"
+        element={
+          <ProtectedRoute>
+            <Exercises />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/editors/templates"
+        element={
+          <ProtectedRoute>
+            <Templates />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/editors/cycle"
+        element={
+          <ProtectedRoute>
+            <CycleEditor />
           </ProtectedRoute>
         }
       />
