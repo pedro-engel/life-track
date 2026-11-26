@@ -32,13 +32,15 @@ interface PlanPanelProps {
    * undefined (missing key) is treated the same as null.
    */
   lastSets: Map<number, LastSet | null>
+  /** The cycle step position for this template, forwarded to the workout screen. */
+  stepPosition: number
 }
 
 /**
  * Plan panel: today's template exercises with reference weights.
  * Shown for template-kind steps in the morning view.
  */
-export function PlanPanel({ template, lastSets }: PlanPanelProps) {
+export function PlanPanel({ template, lastSets, stepPosition }: PlanPanelProps) {
   return (
     <section className="panel">
       <header>
@@ -57,7 +59,11 @@ export function PlanPanel({ template, lastSets }: PlanPanelProps) {
         ))}
       </div>
       <div style={{ marginTop: '16px' }}>
-        <Link to="/workout" className="cta accent">
+        <Link
+          to="/workout"
+          state={{ templateId: template.id, stepPosition }}
+          className="cta accent"
+        >
           Iniciar treino
         </Link>
       </div>

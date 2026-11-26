@@ -4,6 +4,7 @@ import { AuthProvider } from './auth/useAuth'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import Login from './screens/Login'
 import Today from './screens/Today'
+import Workout from './screens/Workout'
 
 /**
  * AppRoutes — inner component that has access to the router context.
@@ -41,7 +42,15 @@ function AppRoutes() {
       {/* Catch-all — redirect unknown paths to root */}
       <Route path="*" element={<Navigate to="/" replace />} />
 
-      {/* Additional routes will be added here in subsequent tasks */}
+      {/* Workout screen — protected, carries templateId + stepPosition as route state */}
+      <Route
+        path="/workout"
+        element={
+          <ProtectedRoute>
+            <Workout />
+          </ProtectedRoute>
+        }
+      />
     </Routes>
   )
 }

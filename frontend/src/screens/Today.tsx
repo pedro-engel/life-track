@@ -366,7 +366,7 @@ export default function Today() {
         nextTemplateName={nextTemplateName}
       />
       <CycleCards cycle={state.cycle} templateNames={state.templateNames} />
-      <PlanPanel template={state.currentTemplate} lastSets={state.lastSets} />
+      <PlanPanel template={state.currentTemplate} lastSets={state.lastSets} stepPosition={state.currentStep.position} />
       <BodyWeightTile bw={state.bw} />
       <AskAIRow />
     </main>
