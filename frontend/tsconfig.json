@@ -24,7 +24,7 @@
     "jsx": "react-jsx",
 
     /* Types available in test files */
-    "types": ["vitest/globals", "@testing-library/jest-dom"]
+    "types": ["vitest/globals", "@testing-library/jest-dom", "vite/client"]
   },
   "include": ["src"]
 }

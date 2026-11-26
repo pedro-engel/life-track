@@ -6,8 +6,41 @@ import { VitePWA } from 'vite-plugin-pwa'
 export default defineConfig({
   plugins: [
     react(),
-    // vite-plugin-pwa — full configuration added in Task 7
-    VitePWA({ registerType: 'autoUpdate' }),
+    VitePWA({
+      registerType: 'autoUpdate',
+      // The service worker precaches the app shell only.
+      // Workout durability is owned by IndexedDB (Task 4) — not the SW cache.
+      workbox: {
+        // Precache the built app shell assets (JS, CSS, HTML)
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,webmanifest}'],
+        // Don't cache API routes — they must always go to the network
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/auth/, /^\/exercises/, /^\/templates/, /^\/cycle/, /^\/sessions/, /^\/bodyweight/, /^\/health/],
+      },
+      manifest: {
+        name: 'Life Track',
+        short_name: 'life·track',
+        description: 'Personal fitness and body-weight tracker',
+        start_url: '/',
+        display: 'standalone',
+        background_color: '#ffffff',
+        theme_color: '#1b6e66',
+        icons: [
+          {
+            src: '/icons/icon-192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+          {
+            src: '/icons/icon-512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any maskable',
+          },
+        ],
+      },
+    }),
   ],
   server: {
     proxy: {
