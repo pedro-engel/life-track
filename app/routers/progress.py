@@ -7,7 +7,11 @@ GET /exercises/{exercise_id}/last-set?position=N
     prior session that contained that exercise.  Returns JSON null (HTTP 200)
     when the exercise has never been logged.
 
-This module is shared with Task 10, which will add a ``/progress`` route here.
+GET /exercises/{exercise_id}/progress
+    Return a chronological time series of per-session aggregates for
+    *exercise_id*: [{date, top_weight, total_reps}, ...], one point per
+    WorkoutSession that logged the exercise.  Returns [] (HTTP 200) when the
+    exercise has never been logged.
 """
 from __future__ import annotations
 
@@ -21,13 +25,13 @@ from sqlmodel import Session
 from app.auth import require_auth
 from app.db import get_session
 from app.models import WorkoutSession
-from app.progress_logic import last_set_for
+from app.progress_logic import last_set_for, progress_series_for
 
 router = APIRouter(prefix="/exercises", tags=["progress"])
 
 
 # ---------------------------------------------------------------------------
-# Response schema
+# Response schemas
 # ---------------------------------------------------------------------------
 
 
@@ -36,6 +40,12 @@ class LastSetResponse(BaseModel):
     reps: int
     note: Optional[str]
     session_date: datetime
+
+
+class ProgressPoint(BaseModel):
+    date: datetime
+    top_weight: float
+    total_reps: int
 
 
 # ---------------------------------------------------------------------------
@@ -66,3 +76,23 @@ def get_last_set(
         note=entry.note,
         session_date=session.started_at,
     )
+
+
+@router.get("/{exercise_id}/progress", response_model=list[ProgressPoint])
+def get_exercise_progress(
+    exercise_id: int,
+    db: Session = Depends(get_session),
+    _: str = Depends(require_auth),
+) -> list[ProgressPoint]:
+    """Return a chronological progress series for *exercise_id*.
+
+    Each element is one WorkoutSession that logged the exercise, containing the
+    maximum weight lifted and the total reps performed.  Returns an empty list
+    when the exercise has never been logged — this is a "no history yet"
+    signal, not an error.
+    """
+    series = progress_series_for(db, exercise_id)
+    return [
+        ProgressPoint(date=point.date, top_weight=point.top_weight, total_reps=point.total_reps)
+        for point in series
+    ]

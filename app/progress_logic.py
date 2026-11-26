@@ -1,4 +1,5 @@
-"""Pure-ish query logic for the "última vez" (last-time) reference lookup.
+"""Pure-ish query logic for the "última vez" (last-time) reference lookup and
+the per-exercise progress series.
 
 ``last_set_for`` finds the most recent WorkoutSession (by ``started_at``) in
 which *exercise_id* was logged, then returns:
@@ -6,9 +7,16 @@ which *exercise_id* was logged, then returns:
 - the SetEntry at ``max(position) ≤ N`` (the session's last set) as a
   fall-back when fewer sets were performed than the requested index;
 - ``None`` when the exercise has never been logged.
+
+``progress_series_for`` returns a time-ordered list of per-session aggregates
+(top_weight, total_reps) for the given exercise.
 """
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
+
+from sqlalchemy import func
 from sqlmodel import Session, select
 
 from app.models import SetEntry, WorkoutSession
@@ -69,3 +77,46 @@ def last_set_for(db: Session, exercise_id: int, position: int) -> SetEntry | Non
     ).first()
 
     return fallback
+
+
+# ---------------------------------------------------------------------------
+# Progress series
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ProgressPoint:
+    """One data point in a per-exercise progress series."""
+
+    date: datetime
+    top_weight: float
+    total_reps: int
+
+
+def progress_series_for(db: Session, exercise_id: int) -> list[ProgressPoint]:
+    """Return a chronological series of per-session aggregates for *exercise_id*.
+
+    Each element represents one WorkoutSession that logged the exercise:
+    - ``date``        — the session's ``started_at`` timestamp
+    - ``top_weight``  — the MAX weight among the exercise's sets in that session
+    - ``total_reps``  — the SUM of reps across the exercise's sets in that session
+
+    Returns an empty list when the exercise has never been logged.
+    """
+    # Aggregate over SetEntry joined to WorkoutSession, grouping by session
+    rows = db.exec(
+        select(
+            WorkoutSession.started_at,
+            func.max(SetEntry.weight).label("top_weight"),
+            func.sum(SetEntry.reps).label("total_reps"),
+        )
+        .join(WorkoutSession, SetEntry.session_id == WorkoutSession.id)
+        .where(SetEntry.exercise_id == exercise_id)
+        .group_by(WorkoutSession.id)
+        .order_by(WorkoutSession.started_at.asc())
+    ).all()
+
+    return [
+        ProgressPoint(date=started_at, top_weight=top_weight, total_reps=total_reps)
+        for started_at, top_weight, total_reps in rows
+    ]
