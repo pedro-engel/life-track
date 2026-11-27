@@ -58,7 +58,7 @@ python -m venv .venv && . .venv/Scripts/activate   # Windows (Git Bash); use .ve
 pip install -e .                                    # or: uv sync
 
 # configure (see Configuration below), then run:
-uvicorn app.main:app --reload                       # http://127.0.0.1:8000
+python -m uvicorn app.main:app --reload                       # http://127.0.0.1:8000
 ```
 
 The SQLite database and the base exercise catalog are created automatically on first run.
@@ -75,7 +75,7 @@ npm run dev        # Vite dev server; proxies /auth, /exercises, ... to http://1
 
 ```bash
 cd frontend && npm run build        # outputs frontend/dist
-uvicorn app.main:app                # FastAPI serves the built SPA at / and the API from the same origin
+python -m uvicorn app.main:app                # FastAPI serves the built SPA at / and the API from the same origin
 ```
 
 Serve it over HTTPS and behind your own host when deploying.
