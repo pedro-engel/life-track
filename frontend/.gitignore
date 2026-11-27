@@ -16,3 +16,6 @@ dist/
 *.njsproj
 *.sln
 *.sw?
+
+# TS incremental build info
+*.tsbuildinfo
